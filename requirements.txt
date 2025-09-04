@@ -1,0 +1,9 @@
+Flask
+Flask-Cors
+pdf2image
+ultralytics
+python-doctr[torch]
+pytesseract
+scikit-image
+opencv-python-headless
+numpy

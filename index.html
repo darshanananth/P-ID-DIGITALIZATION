@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>P&ID Digitization AI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .drop-zone { border: 2px dashed #cbd5e1; transition: all 0.2s ease-in-out; }
+        .drop-zone--over { border-color: #2563eb; background-color: #eff6ff; }
+        #spinner { border-top-color: #3b82f6; animation: spin 1s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+    <link rel="stylesheet" href="https://rsms.me/inter/inter.css">
+</head>
+<body class="bg-slate-100 text-slate-800 flex flex-col items-center justify-center min-h-screen p-4">
+    <div class="w-full max-w-7xl bg-white rounded-2xl shadow-lg p-6 md:p-8">
+        <div class="text-center mb-6">
+            <h1 class="text-3xl md:text-4xl font-bold text-slate-900">P&ID Digitization AI</h1>
+            <p class="text-slate-600 mt-2">Upload a P&ID file (PDF, JPG, PNG) to automatically create a digital graph of the system.</p>
+        </div>
+        <div id="uploader" class="mb-6">
+            <div id="dropZone" class="drop-zone w-full rounded-lg p-10 text-center cursor-pointer">
+                <p class="text-slate-500">Drag & Drop your file here or</p>
+                <label for="fileInput" class="text-blue-600 font-semibold hover:underline cursor-pointer">click to select a file</label>
+                <input type="file" id="fileInput" class="hidden" accept=".pdf,.jpg,.jpeg,.png">
+                <p id="fileName" class="mt-4 text-slate-700 font-medium"></p>
+            </div>
+            <button id="digitizeBtn" class="w-full mt-4 bg-green-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-green-700 transition-colors disabled:bg-slate-400 disabled:cursor-not-allowed" disabled>Digitize P&ID</button>
+        </div>
+        <div id="results" class="hidden">
+            <div id="loading" class="flex flex-col items-center justify-center p-10 text-center hidden">
+                <div id="spinner" class="w-12 h-12 rounded-full border-4 border-slate-200"></div>
+                <p class="text-slate-600 mt-4 text-lg font-semibold">Digitizing your P&ID...</p>
+                <p class="text-slate-500">This can take up to a minute for the AI models to process the file.</p>
+            </div>
+            <div id="errorMessage" class="hidden bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg relative" role="alert">
+                <strong class="font-bold">Error!</strong>
+                <span class="block sm:inline" id="errorText"></span>
+            </div>
+            <div id="content" class="hidden">
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    <div>
+                        <h2 class="text-2xl font-bold mb-4">Digitized Diagram</h2>
+                        <div class="bg-slate-200 p-2 rounded-lg border border-slate-300">
+                            <img id="annotatedImage" src="" alt="Annotated P&ID Diagram" class="w-full h-auto rounded-md">
+                        </div>
+                    </div>
+                    <div>
+                        <div class="flex justify-between items-center mb-4">
+                            <h2 class="text-2xl font-bold">Extracted Graph Data</h2>
+                            <div class="flex items-center space-x-2">
+                                <button id="copyBtn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold py-2 px-3 rounded-md text-sm flex items-center transition-colors">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                                    Copy JSON
+                                </button>
+                                <button id="downloadBtn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold py-2 px-3 rounded-md text-sm flex items-center transition-colors">
+                                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                                    Download JSON
+                                </button>
+                                <span id="copySuccess" class="text-green-600 font-semibold hidden">Copied!</span>
+                            </div>
+                        </div>
+                        <div class="bg-slate-900 text-white font-mono text-sm p-4 rounded-lg h-[600px] overflow-auto">
+                            <pre id="graphData"></pre>
+                        </div>
+                    </div>
+                </div>
+                <button id="resetBtn" class="w-full mt-8 bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors">Process Another File</button>
+            </div>
+        </div>
+    </div>
+    <script>
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const fileNameDisplay = document.getElementById('fileName');
+        const digitizeBtn = document.getElementById('digitizeBtn');
+        const uploaderSection = document.getElementById('uploader');
+        const resultsSection = document.getElementById('results');
+        const loadingSpinner = document.getElementById('loading');
+        const contentDisplay = document.getElementById('content');
+        const errorMessage = document.getElementById('errorMessage');
+        const errorText = document.getElementById('errorText');
+        const annotatedImage = document.getElementById('annotatedImage');
+        const graphData = document.getElementById('graphData');
+        const resetBtn = document.getElementById('resetBtn');
+        const copyBtn = document.getElementById('copyBtn');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const copySuccess = document.getElementById('copySuccess');
+
+        let uploadedFile = null;
+        let jsonData = null; // Store the JSON data globally
+
+        dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('drop-zone--over'); });
+        ['dragleave', 'dragend'].forEach(type => dropZone.addEventListener(type, () => dropZone.classList.remove('drop-zone--over')));
+        dropZone.addEventListener('drop', (e) => { e.preventDefault(); if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]); dropZone.classList.remove('drop-zone--over'); });
+        dropZone.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', () => { if (fileInput.files.length) handleFile(fileInput.files[0]); });
+
+        function handleFile(file) {
+            uploadedFile = file;
+            fileNameDisplay.textContent = file.name;
+            digitizeBtn.disabled = false;
+        }
+
+        digitizeBtn.addEventListener('click', async () => {
+            if (!uploadedFile) return;
+
+            uploaderSection.classList.add('hidden');
+            resultsSection.classList.remove('hidden');
+            loadingSpinner.classList.remove('hidden');
+            contentDisplay.classList.add('hidden');
+            errorMessage.classList.add('hidden');
+
+            const formData = new FormData();
+            formData.append('file', uploadedFile);
+
+            try {
+                const response = await fetch('http://127.0.0.1:5000/digitize', { method: 'POST', body: formData });
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || `Server responded with status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                jsonData = data.graph_data; // Store the structured JSON
+                
+                annotatedImage.src = data.annotated_image;
+                // Pretty-print the JSON for display
+                graphData.textContent = JSON.stringify(jsonData, null, 2);
+
+                loadingSpinner.classList.add('hidden');
+                contentDisplay.classList.remove('hidden');
+
+            } catch (error) {
+                console.error('Error:', error);
+                errorText.textContent = "Could not connect to the backend server. Is it running in your terminal? Error: " + error.message;
+                loadingSpinner.classList.add('hidden');
+                errorMessage.classList.remove('hidden');
+            }
+        });
+        
+        copyBtn.addEventListener('click', () => {
+            if (!jsonData) return;
+            const jsonString = JSON.stringify(jsonData, null, 2);
+            // Use the clipboard API
+            navigator.clipboard.writeText(jsonString).then(() => {
+                copySuccess.classList.remove('hidden');
+                setTimeout(() => copySuccess.classList.add('hidden'), 2000);
+            }).catch(err => console.error('Failed to copy text: ', err));
+        });
+
+        downloadBtn.addEventListener('click', () => {
+            if (!jsonData) return;
+            const jsonString = JSON.stringify(jsonData, null, 2);
+            const blob = new Blob([jsonString], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'pid_graph.json';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        });
+
+        resetBtn.addEventListener('click', () => {
+            uploadedFile = null;
+            jsonData = null;
+            fileNameDisplay.textContent = '';
+            fileInput.value = '';
+            digitizeBtn.disabled = true;
+            resultsSection.classList.add('hidden');
+            uploaderSection.classList.remove('hidden');
+        });
+    </script>
+</body>
+</html>
+
