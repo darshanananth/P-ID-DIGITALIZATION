@@ -3,178 +3,592 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>P&ID Digitization AI</title>
+    <title>Digi P&ID</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
+        @import url('https://rsms.me/inter/inter.css');
         body { font-family: 'Inter', sans-serif; }
-        .drop-zone { border: 2px dashed #cbd5e1; transition: all 0.2s ease-in-out; }
-        .drop-zone--over { border-color: #2563eb; background-color: #eff6ff; }
+        .nav-btn { transition: all 0.2s ease-in-out; }
+        .nav-btn.active { color: #2563eb; background-color: #eff6ff; }
         #spinner { border-top-color: #3b82f6; animation: spin 1s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
+        .data-content::-webkit-scrollbar { width: 8px; }
+        .data-content::-webkit-scrollbar-track { background: #1e293b; }
+        .data-content::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+        .data-content::-webkit-scrollbar-thumb:hover { background: #64748b; }
+        #filePreviewContainer { background-size: contain; background-repeat: no-repeat; background-position: center; }
+        .tooltip { visibility: hidden; opacity: 0; transition: opacity 0.3s; }
+        .has-tooltip:hover .tooltip { visibility: visible; opacity: 1; }
+        .edit-btn { cursor: pointer; color: #60a5fa; text-decoration: underline; margin-left: 8px; font-weight: bold; }
+        .edit-btn:hover { color: #93c5fd; }
+        #annotationCanvas { cursor: crosshair; }
+        .dropdown { position: relative; display: inline-block; }
+        .dropdown-content { display: none; position: absolute; background-color: #fff; min-width: 160px; box-shadow: 0 8px 16px rgba(0,0,0,0.2); z-index: 1; border-radius: 4px; }
+        .dropdown-content button { color: black; padding: 12px 16px; text-decoration: none; display: block; width: 100%; text-align: left; border: none; background: none; cursor: pointer; }
+        .dropdown-content button:hover { background-color: #f1f1f1; }
+        .dropdown:hover .dropdown-content { display: block; }
     </style>
-    <link rel="stylesheet" href="https://rsms.me/inter/inter.css">
 </head>
-<body class="bg-slate-100 text-slate-800 flex flex-col items-center justify-center min-h-screen p-4">
-    <div class="w-full max-w-7xl bg-white rounded-2xl shadow-lg p-6 md:p-8">
-        <div class="text-center mb-6">
-            <h1 class="text-3xl md:text-4xl font-bold text-slate-900">P&ID Digitization AI</h1>
-            <p class="text-slate-600 mt-2">Upload a P&ID file (PDF, JPG, PNG) to automatically create a digital graph of the system.</p>
-        </div>
-        <div id="uploader" class="mb-6">
-            <div id="dropZone" class="drop-zone w-full rounded-lg p-10 text-center cursor-pointer">
-                <p class="text-slate-500">Drag & Drop your file here or</p>
-                <label for="fileInput" class="text-blue-600 font-semibold hover:underline cursor-pointer">click to select a file</label>
-                <input type="file" id="fileInput" class="hidden" accept=".pdf,.jpg,.jpeg,.png">
-                <p id="fileName" class="mt-4 text-slate-700 font-medium"></p>
+<body class="bg-slate-100 flex items-center justify-center min-h-screen p-2 md:p-4">
+
+    <div class="w-full max-w-full md:max-w-7xl bg-white shadow-lg rounded-2xl flex flex-col h-full md:h-auto md:my-8" style="max-height: 95vh;">
+        <header class="flex justify-between items-center p-4 border-b flex-shrink-0">
+            <div class="flex items-center space-x-2">
+                <svg class="h-8 w-8 text-blue-600" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M12 2L2 7V17L12 22L22 17V7L12 2ZM19.6 8.25L12 12.75L4.4 8.25L12 3.75L19.6 8.25Z"/></svg>
+                <h1 class="text-xl font-bold text-slate-800">Digi P&ID</h1>
             </div>
-            <button id="digitizeBtn" class="w-full mt-4 bg-green-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-green-700 transition-colors disabled:bg-slate-400 disabled:cursor-not-allowed" disabled>Digitize P&ID</button>
-        </div>
-        <div id="results" class="hidden">
-            <div id="loading" class="flex flex-col items-center justify-center p-10 text-center hidden">
-                <div id="spinner" class="w-12 h-12 rounded-full border-4 border-slate-200"></div>
-                <p class="text-slate-600 mt-4 text-lg font-semibold">Digitizing your P&ID...</p>
-                <p class="text-slate-500">This can take up to a minute for the AI models to process the file.</p>
-            </div>
-            <div id="errorMessage" class="hidden bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg relative" role="alert">
-                <strong class="font-bold">Error!</strong>
-                <span class="block sm:inline" id="errorText"></span>
-            </div>
-            <div id="content" class="hidden">
-                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                    <div>
-                        <h2 class="text-2xl font-bold mb-4">Digitized Diagram</h2>
-                        <div class="bg-slate-200 p-2 rounded-lg border border-slate-300">
-                            <img id="annotatedImage" src="" alt="Annotated P&ID Diagram" class="w-full h-auto rounded-md">
-                        </div>
-                    </div>
-                    <div>
-                        <div class="flex justify-between items-center mb-4">
-                            <h2 class="text-2xl font-bold">Extracted Graph Data</h2>
-                            <div class="flex items-center space-x-2">
-                                <button id="copyBtn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold py-2 px-3 rounded-md text-sm flex items-center transition-colors">
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-                                    Copy JSON
-                                </button>
-                                <button id="downloadBtn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold py-2 px-3 rounded-md text-sm flex items-center transition-colors">
-                                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-                                    Download JSON
-                                </button>
-                                <span id="copySuccess" class="text-green-600 font-semibold hidden">Copied!</span>
+            <button class="text-slate-600 hover:text-blue-600">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
+            </button>
+        </header>
+
+        <main class="flex-grow overflow-y-auto p-4 bg-slate-50">
+            
+            <div id="uploadPage">
+                <div class="max-w-md mx-auto">
+                    <h2 class="text-2xl font-bold text-slate-900">Document Viewer</h2>
+                    <p class="text-slate-500 mb-4">Upload and view your images, PDF, or CAD documents</p>
+
+                    <div class="bg-blue-600 rounded-lg p-6 text-white shadow-lg">
+                        <label for="fileType" class="text-sm font-medium text-blue-200">File Type</label>
+                        <select id="fileType" class="w-full bg-blue-700 border-none rounded-md p-3 mt-1 text-white focus:ring-2 focus:ring-white">
+                            <option value="image">Image</option>
+                            <option value="pdf">PDF</option>
+                            <option value="cad">CAD File</option>
+                        </select>
+                        <div id="filePreviewContainer" class="mt-6 flex flex-col items-center justify-center h-48 bg-blue-700 rounded-md border-2 border-dashed border-blue-400">
+                            <div id="filePreviewPlaceholder" class="text-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-blue-300 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M12 15l-4-4m0 0l4-4m-4 4h12" /></svg>
+                                <p id="fileNameDisplay" class="text-blue-200 mt-2">No file selected</p>
                             </div>
                         </div>
-                        <div class="bg-slate-900 text-white font-mono text-sm p-4 rounded-lg h-[600px] overflow-auto">
-                            <pre id="graphData"></pre>
+                        <label for="fileInput" class="mt-6 w-full flex items-center justify-center bg-white text-blue-600 font-bold py-3 px-4 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+                            Choose File
+                        </label>
+                        <input type="file" id="fileInput" class="hidden" accept="image/*,.pdf,.dwg,.dxf">
+                    </div>
+                    <button id="digitizeBtn" class="w-full mt-6 bg-green-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-green-700 transition-colors disabled:bg-slate-400 disabled:cursor-not-allowed" disabled>
+                        Analyze Document
+                    </button>
+                </div>
+            </div>
+
+            <div id="resultsPage" class="hidden">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="bg-white rounded-lg p-4 shadow-md md:col-span-2">
+                        <h3 class="font-bold text-slate-800 mb-3">Digitized Diagram</h3>
+                        <p class="text-sm text-slate-500 mb-2">Click a symbol to correct its tag. Drag on an empty area to add a new symbol.</p>
+                        <div class="bg-slate-200 p-2 rounded-lg border border-slate-300 relative">
+                            <canvas id="annotationCanvas" style="position: absolute; top: 0; left: 0; z-index: 10;"></canvas>
+                            <img id="annotatedImageEl" src="" alt="Annotated P&ID Diagram" class="w-full h-auto rounded-md opacity-0 transition-opacity">
+                        </div>
+                         <div class="mt-4 flex flex-col md:flex-row space-y-2 md:space-y-0 md:space-x-2">
+                              <button id="submitCorrectionsBtn" class="w-full bg-yellow-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-yellow-600 transition-colors">Submit New Symbols</button>
+                              <button id="startFinetuningBtn" class="w-full bg-purple-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-purple-700 transition-colors has-tooltip relative">
+                                  Start Fine-Tuning
+                                  <span class="tooltip absolute bottom-full mb-2 w-64 bg-slate-800 text-white text-xs rounded-lg p-2">After submitting corrections, re-train the AI. The server will restart.</span>
+                              </button>
+                         </div>
+                    </div>
+                    
+                    <div class="bg-white rounded-lg p-4 shadow-md">
+                        <h3 class="font-bold text-slate-800 mb-3">Download Results</h3>
+                        <div class="dropdown">
+                            <button class="bg-slate-100 p-3 rounded-lg hover:bg-slate-200 cursor-pointer w-full text-center font-semibold text-slate-700">
+                                Download <span class="text-sm">▼</span>
+                            </button>
+                            <div class="dropdown-content">
+                                <button id="downloadJsonBtn">JSON</button>
+                                <button id="downloadXmlBtn">XML</button>
+                                <button id="downloadIsoBtn">ISO 15926</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-white rounded-lg p-4 shadow-md">
+                        <h3 class="font-bold text-slate-800 mb-3">Analysis Summary</h3>
+                        <div id="analysisSummaryContent" class="space-y-2 text-sm"></div>
+                    </div>
+
+                    <div class="bg-white rounded-lg shadow-md md:col-span-2">
+                        <div class="p-4 flex justify-between items-center">
+                            <h3 class="font-bold text-slate-800">Raw Graph Data</h3>
+                            <div class="dropdown">
+                                <button id="exportBtn" class="bg-slate-100 p-3 rounded-lg hover:bg-slate-200 cursor-pointer text-center font-semibold text-slate-700">
+                                    Export <span class="text-sm">▼</span>
+                                </button>
+                                <div class="dropdown-content" id="exportDropdown">
+                                    <button id="exportJsonBtn">JSON</button>
+                                    <button id="exportXmlBtn">XML</button>
+                                    <button id="exportIsoBtn">ISO 15926</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="border-b border-gray-200 px-4">
+                            <nav class="-mb-px flex space-x-4" id="resultsTabs">
+                                 <button data-target="jsonData" class="tab-btn active whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">Interactive JSON</button>
+                                 <button data-target="xmlData" class="tab-btn whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">XML</button>
+                                 <button data-target="isoData" class="tab-btn whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">ISO 15926</button>
+                            </nav>
+                        </div>
+                        <div class="bg-slate-900 text-white text-sm p-4 rounded-b-lg">
+                            <div id="jsonData" class="data-content font-mono space-y-4 max-h-64 overflow-y-auto"></div>
+                            <pre id="xmlData" class="data-content hidden max-h-64 overflow-y-auto"></pre>
+                            <pre id="isoData" class="data-content hidden max-h-64 overflow-y-auto"></pre>
                         </div>
                     </div>
                 </div>
-                <button id="resetBtn" class="w-full mt-8 bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors">Process Another File</button>
+            </div>
+        </main>
+        
+        <nav class="flex justify-around items-center p-2 border-t bg-white flex-shrink-0">
+            <button id="navUploadBtn" class="nav-btn active flex flex-col items-center text-slate-500 hover:text-blue-600 p-2 rounded-lg w-24">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+                <span class="text-xs font-medium">Upload</span>
+            </button>
+            <button id="navResultsBtn" class="nav-btn flex flex-col items-center text-slate-500 hover:text-blue-600 p-2 rounded-lg w-24" disabled>
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                <span class="text-xs font-medium">Results</span>
+            </button>
+        </nav>
+    </div>
+
+    <div id="fullScreenLoader" class="fixed inset-0 bg-white bg-opacity-90 z-50 flex flex-col items-center justify-center hidden">
+        <div id="spinner" class="w-16 h-16 rounded-full border-4 border-slate-200"></div>
+        <p class="text-slate-700 text-xl font-semibold mt-4">Analyzing Document...</p>
+        <p class="text-slate-500">This may take a moment.</p>
+    </div>
+
+    <div id="tagModal" class="fixed inset-0 bg-gray-600 bg-opacity-60 h-full w-full hidden z-50 flex items-center justify-center p-4">
+        <div class="relative mx-auto p-5 border w-full max-w-sm shadow-lg rounded-md bg-white">
+            <div class="mt-3 text-center">
+                <h3 id="modalTitle" class="text-lg leading-6 font-medium text-gray-900">Correct Tag</h3>
+                <div class="mt-2 px-7 py-3">
+                    <input type="text" id="modalTagInput" class="w-full px-3 py-2 text-gray-700 border rounded-lg focus:outline-none" placeholder="Enter correct tag">
+                </div>
+                <div class="items-center px-4 py-3 space-x-4">
+                    <button id="modalOkBtn" class="px-4 py-2 bg-green-500 text-white text-base font-medium rounded-md w-24 shadow-sm hover:bg-green-600">OK</button>
+                    <button id="modalCancelBtn" class="px-4 py-2 bg-gray-200 text-gray-800 text-base font-medium rounded-md w-24 shadow-sm hover:bg-gray-300">Cancel</button>
+                </div>
             </div>
         </div>
     </div>
+    <div id="classNameModal" class="fixed inset-0 bg-gray-600 bg-opacity-60 h-full w-full hidden z-50 flex items-center justify-center p-4">
+        <div class="relative mx-auto p-5 border w-full max-w-sm shadow-lg rounded-md bg-white">
+            <div class="mt-3 text-center">
+                <h3 class="text-lg leading-6 font-medium text-gray-900">Enter Symbol Name</h3>
+                <div class="mt-2 px-7 py-3">
+                    <p class="text-sm text-gray-500 mb-2">Enter the class name for the new symbol you drew.</p>
+                    <input type="text" id="classNameInput" class="w-full px-3 py-2 text-gray-700 border rounded-lg focus:outline-none" placeholder="e.g., valve, pump">
+                </div>
+                <div class="items-center px-4 py-3 space-x-4">
+                    <button id="classNameOkBtn" class="px-4 py-2 bg-green-500 text-white text-base font-medium rounded-md w-24 shadow-sm hover:bg-green-600">OK</button>
+                    <button id="classNameCancelBtn" class="px-4 py-2 bg-gray-200 text-gray-800 text-base font-medium rounded-md w-24 shadow-sm hover:bg-gray-300">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="newSymbolModal" class="fixed inset-0 bg-gray-600 bg-opacity-60 h-full w-full hidden z-50 flex items-center justify-center p-4">
+        <div class="relative mx-auto p-5 border w-full max-w-sm shadow-lg rounded-md bg-white">
+            <div class="mt-3 text-center">
+                <h3 class="text-lg leading-6 font-medium text-gray-900">Teach AI a New Symbol</h3>
+                <div class="mt-2 px-7 py-3">
+                    <p class="text-sm text-gray-500">The symbol "<strong id="newSymbolName"></strong>" is new! To learn it accurately, please upload at least 30 more images of this symbol.</p>
+                    <input type="file" id="newSymbolFiles" multiple class="mt-4 text-sm text-slate-500 w-full file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-violet-50 file:text-violet-700 hover:file:bg-violet-100"/>
+                </div>
+                <div class="items-center px-4 py-3">
+                    <button id="submitNewSymbolData" class="px-4 py-2 bg-green-500 text-white text-base font-medium rounded-md w-full shadow-sm hover:bg-green-600">Upload and Teach AI</button>
+                    <button id="cancelNewSymbol" class="mt-2 px-4 py-2 bg-gray-200 text-gray-800 text-base font-medium rounded-md w-full shadow-sm hover:bg-gray-300">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
     <script>
-        const dropZone = document.getElementById('dropZone');
+        // --- Element References ---
         const fileInput = document.getElementById('fileInput');
-        const fileNameDisplay = document.getElementById('fileName');
         const digitizeBtn = document.getElementById('digitizeBtn');
-        const uploaderSection = document.getElementById('uploader');
-        const resultsSection = document.getElementById('results');
-        const loadingSpinner = document.getElementById('loading');
-        const contentDisplay = document.getElementById('content');
-        const errorMessage = document.getElementById('errorMessage');
-        const errorText = document.getElementById('errorText');
-        const annotatedImage = document.getElementById('annotatedImage');
-        const graphData = document.getElementById('graphData');
-        const resetBtn = document.getElementById('resetBtn');
-        const copyBtn = document.getElementById('copyBtn');
-        const downloadBtn = document.getElementById('downloadBtn');
-        const copySuccess = document.getElementById('copySuccess');
+        const filePreviewContainer = document.getElementById('filePreviewContainer');
+        const filePreviewPlaceholder = document.getElementById('filePreviewPlaceholder');
+        const fileNameDisplay = document.getElementById('fileNameDisplay');
+        const fullScreenLoader = document.getElementById('fullScreenLoader');
+        const uploadPage = document.getElementById('uploadPage');
+        const resultsPage = document.getElementById('resultsPage');
+        const navUploadBtn = document.getElementById('navUploadBtn');
+        const navResultsBtn = document.getElementById('navResultsBtn');
+        const downloadJsonBtn = document.getElementById('downloadJsonBtn');
+        const downloadXmlBtn = document.getElementById('downloadXmlBtn');
+        const downloadIsoBtn = document.getElementById('downloadIsoBtn');
+        const exportBtn = document.getElementById('exportBtn');
+        const exportDropdown = document.getElementById('exportDropdown');
+        const exportJsonBtn = document.getElementById('exportJsonBtn');
+        const exportXmlBtn = document.getElementById('exportXmlBtn');
+        const exportIsoBtn = document.getElementById('exportIsoBtn');
+        const analysisSummaryContent = document.getElementById('analysisSummaryContent');
+        const resultsTabs = document.getElementById('resultsTabs');
+        const dataContents = document.querySelectorAll('.data-content');
+        const annotatedImageEl = document.getElementById('annotatedImageEl');
+        const canvas = document.getElementById('annotationCanvas');
+        const ctx = canvas.getContext('2d');
+        const submitCorrectionsBtn = document.getElementById('submitCorrectionsBtn');
+        const startFinetuningBtn = document.getElementById('startFinetuningBtn');
+        const tagModal = document.getElementById('tagModal');
+        const modalTitle = document.getElementById('modalTitle');
+        const modalTagInput = document.getElementById('modalTagInput');
+        const modalOkBtn = document.getElementById('modalOkBtn');
+        const modalCancelBtn = document.getElementById('modalCancelBtn');
+        const classNameModal = document.getElementById('classNameModal');
+        const classNameInput = document.getElementById('classNameInput');
+        const classNameOkBtn = document.getElementById('classNameOkBtn');
+        const classNameCancelBtn = document.getElementById('classNameCancelBtn');
+        const newSymbolModal = document.getElementById('newSymbolModal');
+        const newSymbolName = document.getElementById('newSymbolName');
+        const newSymbolFiles = document.getElementById('newSymbolFiles');
+        const submitNewSymbolData = document.getElementById('submitNewSymbolData');
+        const cancelNewSymbol = document.getElementById('cancelNewSymbol');
 
+        // --- State Variables ---
         let uploadedFile = null;
-        let jsonData = null; // Store the JSON data globally
+        let jsonData = {};
+        let baseImage = new Image();
+        let isDrawing = false;
+        let startX, startY;
+        let newAnnotations = [];
+        let digitizedNodes = []; 
+        let currentNewClassName = '';
 
-        dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('drop-zone--over'); });
-        ['dragleave', 'dragend'].forEach(type => dropZone.addEventListener(type, () => dropZone.classList.remove('drop-zone--over')));
-        dropZone.addEventListener('drop', (e) => { e.preventDefault(); if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]); dropZone.classList.remove('drop-zone--over'); });
-        dropZone.addEventListener('click', () => fileInput.click());
-        fileInput.addEventListener('change', () => { if (fileInput.files.length) handleFile(fileInput.files[0]); });
-
+        // --- Page Navigation ---
+        function showPage(pageId) {
+            uploadPage.classList.toggle('hidden', pageId !== 'uploadPage');
+            resultsPage.classList.toggle('hidden', pageId !== 'resultsPage');
+            navUploadBtn.classList.toggle('active', pageId === 'uploadPage');
+            navResultsBtn.classList.toggle('active', pageId === 'resultsPage');
+        }
+        navUploadBtn.addEventListener('click', () => showPage('uploadPage'));
+        navResultsBtn.addEventListener('click', () => showPage('resultsPage'));
+        
+        // --- File Handling & Preview ---
         function handleFile(file) {
             uploadedFile = file;
-            fileNameDisplay.textContent = file.name;
             digitizeBtn.disabled = false;
+            filePreviewPlaceholder.classList.add('hidden');
+            fileNameDisplay.textContent = file.name; // Update file name display
+            if (file.type.startsWith('image/')) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    filePreviewContainer.style.backgroundImage = `url(${e.target.result})`;
+                };
+                reader.readAsDataURL(file);
+            } else {
+                filePreviewContainer.style.backgroundImage = 'none';
+                filePreviewPlaceholder.classList.remove('hidden');
+                filePreviewPlaceholder.innerHTML = `<p class="text-blue-200 font-semibold p-4 text-center">${file.name}</p>`;
+            }
         }
+        fileInput.addEventListener('change', () => {
+            if (fileInput.files.length) handleFile(fileInput.files[0]);
+        });
 
+        // --- Main Digitization Logic ---
         digitizeBtn.addEventListener('click', async () => {
             if (!uploadedFile) return;
-
-            uploaderSection.classList.add('hidden');
-            resultsSection.classList.remove('hidden');
-            loadingSpinner.classList.remove('hidden');
-            contentDisplay.classList.add('hidden');
-            errorMessage.classList.add('hidden');
-
-            const formData = new FormData();
-            formData.append('file', uploadedFile);
-
+            fullScreenLoader.classList.remove('hidden');
             try {
+                const formData = new FormData();
+                formData.append('file', uploadedFile);
                 const response = await fetch('http://127.0.0.1:5000/digitize', { method: 'POST', body: formData });
                 if (!response.ok) {
                     const errorData = await response.json();
                     throw new Error(errorData.error || `Server responded with status: ${response.status}`);
                 }
-
                 const data = await response.json();
-                jsonData = data.graph_data; // Store the structured JSON
                 
-                annotatedImage.src = data.annotated_image;
-                // Pretty-print the JSON for display
-                graphData.textContent = JSON.stringify(jsonData, null, 2);
+                jsonData = data.graph_data;
+                digitizedNodes = data.graph_data.json;
 
-                loadingSpinner.classList.add('hidden');
-                contentDisplay.classList.remove('hidden');
+                baseImage.src = data.annotated_image;
+                baseImage.onload = () => {
+                    annotatedImageEl.src = baseImage.src;
+                    annotatedImageEl.classList.remove('opacity-0');
+                    redrawCanvas();
+                };
 
+                populateAnalysisSummary(data);
+                renderInteractiveJson(digitizedNodes);
+                document.getElementById('xmlData').textContent = jsonData.xml;
+                document.getElementById('isoData').textContent = JSON.stringify(jsonData.iso15926_json, null, 2);
+
+                navResultsBtn.disabled = false;
+                showPage('resultsPage');
             } catch (error) {
-                console.error('Error:', error);
-                errorText.textContent = "Could not connect to the backend server. Is it running in your terminal? Error: " + error.message;
-                loadingSpinner.classList.add('hidden');
-                errorMessage.classList.remove('hidden');
+                alert("An error occurred: " + error.message);
+            } finally {
+                fullScreenLoader.classList.add('hidden');
             }
         });
         
-        copyBtn.addEventListener('click', () => {
-            if (!jsonData) return;
-            const jsonString = JSON.stringify(jsonData, null, 2);
-            // Use the clipboard API
-            navigator.clipboard.writeText(jsonString).then(() => {
-                copySuccess.classList.remove('hidden');
-                setTimeout(() => copySuccess.classList.add('hidden'), 2000);
-            }).catch(err => console.error('Failed to copy text: ', err));
+        // --- Result Display Helpers & UI ---
+        function populateAnalysisSummary(data) {
+            const bom = data.bill_of_materials || [];
+            let content = '';
+            const analysisId = `ANA_${new Date().toISOString().replace(/[-:.]/g, '').slice(0, -4)}`;
+            content += `<div class="flex justify-between"><span class="text-slate-500">Analysis ID:</span><span class="font-semibold text-slate-800">${analysisId}</span></div>`;
+            content += `<div class="flex justify-between"><span class="text-slate-500">Content Type:</span><span class="font-semibold text-slate-800">CAD Document</span></div>`;
+            if (bom.length > 0) {
+                content += `<div class="pt-2 mt-2 border-t"><span class="font-bold text-slate-800">Features Found:</span></div>`;
+                bom.forEach(item => {
+                    content += `<div class="flex justify-between pl-2"><span class="text-slate-500">${item.symbol}:</span><span class="font-semibold text-slate-800">${item.count} items</span></div>`;
+                });
+            }
+            analysisSummaryContent.innerHTML = content;
+        }
+        function renderInteractiveJson(nodes) {
+            const container = document.getElementById('jsonData');
+            container.innerHTML = ''; 
+            if (!nodes || nodes.length === 0) { container.innerHTML = '<span>No data to display.</span>'; return; }
+            nodes.forEach(node => {
+                const nodeEl = document.createElement('div');
+                nodeEl.className = 'p-2 border border-slate-700 rounded';
+                const addInfoLine = (key, valueHTML) => {
+                    const div = document.createElement('div');
+                    div.innerHTML = `<span class="font-bold text-slate-400">${key}:</span> ${valueHTML}`;
+                    return div;
+                };
+                nodeEl.appendChild(addInfoLine('node_id', node.node_id));
+                nodeEl.appendChild(addInfoLine('type', `"${node.type}"`));
+                const tagLine = document.createElement('div');
+                tagLine.innerHTML = `<span class="font-bold text-slate-400">tag:</span> "${node.tag || 'N/A'}"`;
+                const editBtn = document.createElement('span');
+                editBtn.className = 'edit-btn';
+                editBtn.textContent = '[Edit]';
+                editBtn.addEventListener('click', () => { showTagCorrectionModal(node.node_id, node.tag); });
+                tagLine.appendChild(editBtn);
+                nodeEl.appendChild(tagLine);
+                container.appendChild(nodeEl);
+            });
+        }
+        resultsTabs.addEventListener('click', (e) => {
+            if (e.target.tagName !== 'BUTTON') return;
+            const targetId = e.target.dataset.target;
+            resultsTabs.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            e.target.classList.add('active');
+            dataContents.forEach(content => content.classList.add('hidden'));
+            document.getElementById(targetId).classList.remove('hidden');
         });
 
-        downloadBtn.addEventListener('click', () => {
-            if (!jsonData) return;
-            const jsonString = JSON.stringify(jsonData, null, 2);
-            const blob = new Blob([jsonString], { type: 'application/json' });
+        // --- Download Logic ---
+        function downloadData(data, filename, mimeType) {
+            const blob = new Blob([data], { type: mimeType });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = 'pid_graph.json';
+            a.download = filename;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
+        }
+        downloadJsonBtn.addEventListener('click', () => downloadData(JSON.stringify(jsonData.json, null, 2), 'analysis.json', 'application/json'));
+        downloadXmlBtn.addEventListener('click', () => downloadData(jsonData.xml, 'analysis.xml', 'application/xml'));
+        downloadIsoBtn.addEventListener('click', () => downloadData(JSON.stringify(jsonData.iso15926_json, null, 2), 'analysis_iso15926.json', 'application/json'));
+        exportJsonBtn.addEventListener('click', () => downloadData(JSON.stringify(jsonData.json, null, 2), 'graph_data.json', 'application/json'));
+        exportXmlBtn.addEventListener('click', () => downloadData(jsonData.xml, 'graph_data.xml', 'application/xml'));
+        exportIsoBtn.addEventListener('click', () => downloadData(JSON.stringify(jsonData.iso15926_json, null, 2), 'graph_data_iso15926.json', 'application/json'));
+
+        // Ensure export dropdown works
+        exportBtn.addEventListener('click', (e) => {
+            e.preventDefault(); // Prevent any default behavior
+            const dropdown = exportDropdown;
+            dropdown.style.display = dropdown.style.display === 'block' ? 'none' : 'block';
         });
 
-        resetBtn.addEventListener('click', () => {
-            uploadedFile = null;
-            jsonData = null;
-            fileNameDisplay.textContent = '';
-            fileInput.value = '';
-            digitizeBtn.disabled = true;
-            resultsSection.classList.add('hidden');
-            uploaderSection.classList.remove('hidden');
+        // --- Canvas Drawing & Fine-tuning Logic ---
+        function redrawCanvas() {
+            if (!baseImage.src || !annotatedImageEl.clientWidth) return;
+            canvas.width = annotatedImageEl.clientWidth;
+            canvas.height = annotatedImageEl.clientHeight;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(baseImage, 0, 0, canvas.width, canvas.height);
+            ctx.strokeStyle = 'rgba(239, 68, 68, 0.9)';
+            ctx.lineWidth = 3;
+            newAnnotations.forEach(anno => { ctx.strokeRect(anno.box[0], anno.box[1], anno.box[2] - anno.box[0], anno.box[3] - anno.box[1]); });
+        }
+        window.addEventListener('resize', redrawCanvas);
+        canvas.addEventListener('mousedown', e => { isDrawing = true; const rect = canvas.getBoundingClientRect(); startX = (e.clientX - rect.left); startY = (e.clientY - rect.top); });
+        canvas.addEventListener('mousemove', e => { if (!isDrawing) return; redrawCanvas(); ctx.strokeRect(startX, startY, (e.clientX - rect.left) - startX, (e.clientY - rect.top) - startY); });
+        canvas.addEventListener('mouseup', e => {
+            if (!isDrawing) return;
+            isDrawing = false;
+            const rect = canvas.getBoundingClientRect();
+            const endX = (e.clientX - rect.left);
+            const endY = (e.clientY - rect.top);
+            if (Math.abs(endX - startX) < 5 && Math.abs(endY - startY) < 5) { redrawCanvas(); return; }
+            const box = [Math.min(startX, endX), Math.min(startY, endY), Math.max(startX, endX), Math.max(startY, endY)].map(Math.round);
+            showClassNameModal(box);
         });
+        function showClassNameModal(box) {
+            classNameModal.classList.remove('hidden');
+            classNameInput.value = '';
+            classNameInput.focus();
+            const hide = () => classNameModal.classList.add('hidden');
+            classNameOkBtn.onclick = () => {
+                const className = classNameInput.value.trim();
+                if (className) newAnnotations.push({ className, box });
+                redrawCanvas();
+                hide();
+            };
+            classNameInput.onkeydown = (e) => { if (e.key === 'Enter') classNameOkBtn.click(); };
+            classNameCancelBtn.onclick = () => { redrawCanvas(); hide(); };
+        }
+        submitCorrectionsBtn.addEventListener('click', async () => {
+            if (newAnnotations.length === 0) { alert("No new symbols drawn. Drag on the image to add a symbol first."); return; }
+            try {
+                const annotation = newAnnotations[0]; 
+                const scaleX = baseImage.naturalWidth / canvas.width;
+                const scaleY = baseImage.naturalHeight / canvas.height;
+                const scaledAnnotation = { 
+                    className: annotation.className, 
+                    box: [ annotation.box[0] * scaleX, annotation.box[1] * scaleY, annotation.box[2] * scaleX, annotation.box[3] * scaleY ].map(Math.round)
+                };
+                const response = await fetch('http://127.0.0.1:5000/submit_correction', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ image_b64: baseImage.src, annotation: scaledAnnotation }) });
+                const data = await response.json();
+                if(data.status === 'new_class_detected') {
+                    currentNewClassName = data.className;
+                    newSymbolName.textContent = data.className;
+                    newSymbolModal.classList.remove('hidden');
+                } else if (data.status === 'success') {
+                    alert('Correction submitted successfully!');
+                    newAnnotations.shift(); 
+                    redrawCanvas();
+                } else { throw new Error(data.error || 'Server returned an error.'); }
+            } catch (error) { alert(`Failed to submit corrections: ${error.message}`); }
+        });
+        startFinetuningBtn.addEventListener('click', () => {
+            if (!confirm("Start re-training the AI? The server will restart. Are you sure?")) return;
+            alert("Starting fine-tuning process. The server will become unavailable and will restart automatically when finished.");
+            fetch('http://127.0.0.1:5000/start_finetuning', { method: 'POST' }).catch(error => console.log("Fine-tuning request sent. Error is expected as server restarts.", error));
+        });
+        cancelNewSymbol.addEventListener('click', () => { newSymbolModal.classList.add('hidden'); newSymbolFiles.value = ''; });
+        submitNewSymbolData.addEventListener('click', async () => {
+            const files = newSymbolFiles.files;
+            if (files.length < 30) { alert("Please select at least 30 images to teach the new symbol."); return; }
+            const formData = new FormData();
+            formData.append('className', currentNewClassName);
+            for (const file of files) { formData.append('files', file); }
+            try {
+                const response = await fetch('http://127.0.0.1:5000/upload_new_symbol_data', { method: 'POST', body: formData });
+                 if (!response.ok) throw new Error('Server returned an error during upload.');
+                alert('New symbol data uploaded! You can now start fine-tuning.');
+                newSymbolModal.classList.add('hidden');
+                newAnnotations.shift(); 
+                redrawCanvas();
+            } catch(error) { alert(`Failed to upload new symbol data: ${error.message}`); }
+        });
+
+        // --- Tag Correction Logic ---
+        canvas.addEventListener('click', (e) => {
+            if (isDrawing || digitizedNodes.length === 0) return;
+            const rect = canvas.getBoundingClientRect();
+            const clickX = e.clientX - rect.left;
+            const clickY = e.clientY - rect.top;
+            const imageScaleX = canvas.width / baseImage.naturalWidth;
+            const imageScaleY = canvas.height / baseImage.naturalHeight;
+            for (const node of digitizedNodes) {
+                if (!node.bbox) continue;
+                const [x1, y1, x2, y2] = node.bbox;
+                const canvasX1 = x1 * imageScaleX;
+                const canvasY1 = y1 * imageScaleY;
+                const canvasX2 = x2 * imageScaleX;
+                const canvasY2 = y2 * imageScaleY;
+                if (clickX >= canvasX1 && clickX <= canvasX2 && clickY >= canvasY1 && clickY <= canvasY2) {
+                    showTagCorrectionModal(node.node_id, node.tag);
+                    break; 
+                }
+            }
+        });
+        
+        function showTagCorrectionModal(nodeId, currentTag) {
+            const node = digitizedNodes.find(n => n.node_id === nodeId);
+            if (!node) return;
+            modalTitle.textContent = `Correct Tag for ${node.type} (ID: ${node.node_id})`;
+            modalTagInput.value = currentTag || '';
+            tagModal.classList.remove('hidden');
+            modalTagInput.focus();
+            const hideModal = () => tagModal.classList.add('hidden');
+            modalOkBtn.onclick = () => {
+                const newTag = modalTagInput.value;
+                if (newTag !== currentTag) submitTagCorrection(nodeId, newTag);
+                hideModal();
+            };
+            modalTagInput.onkeydown = (e) => { if (e.key === 'Enter') modalOkBtn.click(); };
+            modalCancelBtn.onclick = hideModal;
+        }
+        
+        async function submitTagCorrection(nodeId, tag) {
+            try {
+                const response = await fetch('http://127.0.0.1:5000/submit_tag_correction', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ node_id: nodeId, tag: tag, image_b64: baseImage.src })
+                });
+                if (!response.ok) throw new Error('Server returned an error.');
+                const nodeToUpdate = digitizedNodes.find(n => n.node_id === nodeId);
+                if (nodeToUpdate) {
+                    nodeToUpdate.tag = tag;
+                    jsonData.xml = formatToXml(digitizedNodes);
+                    jsonData.iso15926_json = formatToIso15926(digitizedNodes);
+                    renderInteractiveJson(digitizedNodes);
+                    document.getElementById('xmlData').textContent = jsonData.xml;
+                    document.getElementById('isoData').textContent = JSON.stringify(jsonData.iso15926_json, null, 2);
+                }
+            } catch (error) {
+                alert(`Failed to submit tag correction: ${error.message}`);
+            }
+        }
+
+        // --- Data Formatters ---
+        function formatToXml(nodes) {
+            let xmlString = '<PID_Graph>\n  <Nodes>\n';
+            nodes.forEach(node => {
+                const tag = (node.tag || 'N/A').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+                xmlString += `    <Node id="${node.node_id}">\n`;
+                xmlString += `      <Type>${node.type}</Type>\n`;
+                xmlString += `      <Tag>${tag}</Tag>\n`;
+                xmlString += `      <TagConfidence>${node.tag_confidence}</TagConfidence>\n`;
+                xmlString += `      <NeedsReview>${node.needs_review}</NeedsReview>\n`;
+                xmlString += `      <Connections>\n`;
+                if (node.connections && node.connections.length > 0) {
+                    xmlString += `        <ConnectedNode id="${node.connections[0]}" />\n`;
+                }
+                xmlString += `      </Connections>\n`;
+                xmlString += `    </Node>\n`;
+            });
+            xmlString += '  </Nodes>\n</PID_Graph>';
+            return xmlString;
+        }
+        function formatToIso15926(nodes) {
+            const entities = [];
+            const relationships = [];
+            const processedRelationships = new Set(); 
+            nodes.forEach(node => {
+                entities.push({
+                    "id": `Node_${node.node_id}`,
+                    "class": "PhysicalObject",
+                    "attributes": { "type": node.type, "tag": node.tag || 'N/A', "tag_confidence": node.tag_confidence, "needs_review": node.needs_review }
+                });
+                if (node.connections && node.connections.length > 0) {
+                    const fromId = node.node_id;
+                    const toId = node.connections[0];
+                    const edgeKey = [fromId, toId].sort().join('-');
+                    if (!processedRelationships.has(edgeKey)) {
+                        relationships.push({ "from": `Node_${fromId}`, "to": `Node_${toId}`, "type": "is-connected-to" });
+                        processedRelationships.add(edgeKey);
+                    }
+                }
+            });
+            return { entities, relationships };
+        }
     </script>
 </body>
 </html>
-
